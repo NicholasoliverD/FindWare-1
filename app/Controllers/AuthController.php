@@ -5,7 +5,7 @@ class AuthController extends Controller
 {
     public function __construct()
     {
-        parent::__construct(false); // rotas públicas, não exige login
+        parent::__construct(false); // Rotas públicas (login/cadastro)
     }
 
     public function loginForm(): void
@@ -24,12 +24,19 @@ class AuthController extends Controller
         $email = trim($_POST['email'] ?? '');
         $senha = $_POST['senha'] ?? '';
 
+        if ($email === '' || $senha === '') {
+            $this->redirect('login?erro=1');
+            return;
+        }
+
         $usuario = $usuarioModel->encontrarPorEmailSenha($email, $senha);
 
         if (!$usuario) {
             $this->redirect('login?erro=1');
+            return;
         }
 
+        // Prevenção de Fixação de Sessão (Session Fixation)
         session_regenerate_id(true);
         $_SESSION['usuario'] = $usuario['nome'];
         $_SESSION['usuario_id'] = $usuario['id'];
@@ -56,6 +63,17 @@ class AuthController extends Controller
                 'titulo' => 'Campos obrigatórios',
                 'mensagem' => 'Preencha todos os campos para se cadastrar.',
                 'botoes' => [['rota' => 'cadastro', 'texto' => 'Tentar Novamente']],
+            ], 'auth');
+            return;
+        }
+
+        // Validação estrita de formato de e-mail
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->view('mensagem', [
+                'status' => 'erro',
+                'titulo' => 'E-mail inválido',
+                'mensagem' => 'Por favor, informe um endereço de e-mail válido.',
+                'botoes' => [['rota' => 'cadastro', 'texto' => 'Corrigir E-mail']],
             ], 'auth');
             return;
         }
@@ -90,6 +108,18 @@ class AuthController extends Controller
     public function logout(): void
     {
         $_SESSION = [];
+        if (ini_get("session.use_cookies")) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params["path"],
+                $params["domain"],
+                $params["secure"],
+                $params["httponly"]
+            );
+        }
         session_destroy();
         $this->redirect('login');
     }
